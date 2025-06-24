@@ -64,14 +64,14 @@ def compute_edit_quality(
     rewrite_prompts = record["prompt"]
     rephrase_prompts = record["rephrase_prompt"] if 'rephrase_prompt' in record.keys() else None
     ret = compute_rewrite_or_rephrase_quality(model, model_name, hparams, tok,
-                                              rewrite_prompts, target_new, device=device, eval_metric=eval_metric)
+                                              rewrite_prompts, target_new, device='cpu', eval_metric=eval_metric)
 
     ret['locality'] = {}
     ret['portability'] = {}
     if rephrase_prompts is not None:
         ret.update(
             compute_rewrite_or_rephrase_quality(model, model_name, hparams, tok,
-                                                rephrase_prompts, target_new, device=device, test_rephrase=True, eval_metric=eval_metric)
+                                                rephrase_prompts, target_new, device='cpu', test_rephrase=True, eval_metric=eval_metric)
         )
 
     if 'locality' in record.keys() and any(record['locality']):
@@ -79,14 +79,14 @@ def compute_edit_quality(
             ret['locality'].update(
                 compute_locality_quality(model, model_name, hparams, tok, locality_key,
                                          record['locality'][locality_key]['prompt'],
-                                         record['locality'][locality_key]['ground_truth'], device=device)
+                                         record['locality'][locality_key]['ground_truth'], device='cpu')
             )
     if 'portability' in record.keys() and any(record['portability']):
         for portability_key in record['portability'].keys():
             ret['portability'].update(
                 compute_portability_quality(model, model_name, hparams, tok, portability_key,
                                             record['portability'][portability_key]['prompt'],
-                                            record['portability'][portability_key]['ground_truth'], device=device)
+                                            record['portability'][portability_key]['ground_truth'], device='cpu')
             )
     if test_generation:
         if hparams.alg_name == 'GRACE':
@@ -113,9 +113,8 @@ def compute_rewrite_or_rephrase_quality(
         key = 'rephrase'
     # using real-world evaluation: autoregressive decoding, natural stop criteria, LLM-as-a-Judge
     if hasattr(hparams, 'evaluation_type') and hparams.evaluation_type == "LLM-judge":
-        acc, gen_content = test_prediction_acc_LLM_judge(model, tok, hparams, prompt, target_new, device, locality=False)
+        _, gen_content = test_prediction_acc_LLM_judge(model, tok, hparams, prompt, target_new, device, locality=False)
         ret = {
-            f"{key}_acc": acc,
             f"{key}_gen_content": gen_content
         }
     elif hasattr(hparams, 'evaluation_type') and hparams.evaluation_type == "generate-text":
@@ -137,22 +136,21 @@ def compute_rewrite_or_rephrase_quality(
         elif hparams.alg_name=="GRACE":
             # ppl = PPL(model, tok, prompt, target_new, device)
             if 't5' in model_name.lower():
-                acc = test_seq2seq_batch_prediction_acc(model, tok, hparams, prompt, target_new, device)
+                _, gen_content = test_seq2seq_batch_prediction_acc(model, tok, hparams, prompt, target_new, device)
             else:
-                acc = test_prediction_acc(model, tok, hparams, prompt, target_new, device, vanilla_generation=True)
+                _, gen_content = test_prediction_acc(model, tok, hparams, prompt, target_new, device, vanilla_generation=True)
             f1 = F1(model,tok,hparams,prompt,target_new,device, vanilla_generation=True)
             ret = {
-                f"{key}_acc": acc,
-                # f"{key}_PPL": ppl,
+                f"{key}_gen_content": gen_content,
                 f"{key}_F1":f1     
             }        
         else:  # teacher-forcing evaluation
             if 't5' in model_name.lower():
-                acc = test_seq2seq_batch_prediction_acc(model, tok, hparams, prompt, target_new, device)
+                _, gen_content = test_seq2seq_batch_prediction_acc(model, tok, hparams, prompt, target_new, device)
             else:
-                acc = test_prediction_acc(model, tok, hparams, prompt, target_new, device)
+                _, gen_content = test_prediction_acc(model, tok, hparams, prompt, target_new, device)
             ret = {
-                f"{key}_acc": acc
+                f"{key}_gen_content": gen_content
             }
     return ret
 
@@ -200,12 +198,12 @@ def compute_portability_quality(
         portability_correct = test_prediction_acc_LLM_judge(model, tok, hparams, prompt, ground_truth, device, locality=False)
     else:  # traditional evaluation
         if 't5' in model_name.lower():
-            portability_correct = test_seq2seq_batch_prediction_acc(model, tok, hparams, prompt, ground_truth, device)
+            _, portability_correct = test_seq2seq_batch_prediction_acc(model, tok, hparams, prompt, ground_truth, device)
         else:
-            portability_correct = test_prediction_acc(model, tok, hparams, prompt, ground_truth, device, vanilla_generation=hparams.alg_name=='GRACE')
+            _, portability_correct = test_prediction_acc(model, tok, hparams, prompt, ground_truth, device, vanilla_generation=hparams.alg_name=='GRACE')
 
     ret = {
-        f"{portability_key}_acc": portability_correct
+        f"{portability_key}_gen_content": portability_correct
     }
     return ret
 
@@ -335,7 +333,7 @@ def icl_lm_eval(
         x,
         neighborhood=False
 )-> typing.Dict:
-    device = torch.device(f'cuda:{hparams.device}')
+    device = torch.device('cpu')
     if 't5' in model_name.lower():
         target_len = len(tokenizer.encode(target))
         target_ids = tokenizer(f'{x} {target}', return_tensors='pt')['input_ids'].to(device)

@@ -90,7 +90,7 @@ class SafetyEditor:
         if hparams.model_parallel:
             hparams.device = str(self.model.device).split(":")[1]
         if not hparams.model_parallel and hasattr(hparams, 'device'):
-            self.model.to(f'cuda:{hparams.device}')
+            self.model.to('cpu')
 
         self.hparams = hparams
 
@@ -101,7 +101,7 @@ class SafetyEditor:
         # else:
         #     tokenizer.padding_side = 'left'
         toxic_layer = []
-        input = tokenizer([value for pair in requests for value in [pair["target_new"], pair["ground_truth"]]], return_tensors="pt", padding=True, truncation=True).to(f"cuda:{self.hparams.device}") 
+        input = tokenizer([value for pair in requests for value in [pair["target_new"], pair["ground_truth"]]], return_tensors="pt", padding=True, truncation=True).to('cpu') 
         with torch.no_grad():
             outputs = model(**input)
         hidden_states = outputs.hidden_states
@@ -210,7 +210,7 @@ class SafetyEditor:
                 
                 with torch.no_grad():
                     for k, v in weights_copy.items():
-                        nethook.get_parameter(self.model, k)[...] = v.to(f"cuda:{self.hparams.device}")
+                        nethook.get_parameter(self.model, k)[...] = v.to('cpu')
                 
 
                 LOG.info(f"Evaluation took {time() - start}")
@@ -245,7 +245,7 @@ class SafetyEditor:
                 
                 with torch.no_grad():
                     for k, v in weights_copy.items():
-                        nethook.get_parameter(self.model, k)[...] = v.to(f"cuda:{self.hparams.device}")
+                        nethook.get_parameter(self.model, k)[...] = v.to('cpu')
                 
 
                 LOG.info(f"Evaluation took {time() - start}")

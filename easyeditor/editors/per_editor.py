@@ -88,7 +88,7 @@ class PerEditor:
         if hparams.model_parallel:
             hparams.device = str(self.model.device).split(":")[1]
         if not hparams.model_parallel and hasattr(hparams, 'device'):
-            self.model.to(f'cuda:{hparams.device}')
+            self.model.to('cpu')
             self.device = hparams.device
 
         self.hparams = hparams

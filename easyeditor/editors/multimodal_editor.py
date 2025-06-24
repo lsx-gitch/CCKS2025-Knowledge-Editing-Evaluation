@@ -158,7 +158,7 @@ class MultimodalEditor:
         else:
             self.model, self.tok = self.model_name
             
-        self.model.to(f'cuda:{hparams.device}')
+        self.model.to('cpu')
         self.hparams = hparams
 
     def edit(self,
@@ -231,9 +231,9 @@ class MultimodalEditor:
                             'case_nums': i,
                             "time": exec_time,
                             "post": compute_icl_multimodal_edit_quality(self.model, self.model_name, self.hparams, self.tok, icl_examples,
-                                                                request, self.hparams.device),
+                                                                request, 'cpu'),
                             "pre": compute_icl_multimodal_edit_quality(self.model, self.model_name, self.hparams, self.tok, [''],
-                                                                request, self.hparams.device, pre_edit=True)
+                                                                request, 'cpu', pre_edit=True)
                         }
                     else:
                         # QUESTION = request["prompt"]
@@ -249,9 +249,9 @@ class MultimodalEditor:
                             'case_nums': i,
                             "time": exec_time,
                             "post": compute_multimodal_hf_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                prompt_new_request, self.hparams.device),
+                                                                prompt_new_request, 'cpu'),
                             "pre": compute_multimodal_hf_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device)
+                                                                request, 'cpu')
                         }
                 else:
                     if self.model_name in ['minigpt4', 'blip2']:
@@ -259,18 +259,18 @@ class MultimodalEditor:
                             'case_nums': i,
                             "time": exec_time,
                             "post": compute_multimodal_edit_results(edited_model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device),
+                                                                request, 'cpu'),
                             "pre": compute_multimodal_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device)
+                                                                request, 'cpu')
                         }
                     elif self.model_name in ['llava-onevision', 'qwen2-vl']:
                         metrics = {
                             'case_nums': i,
                             "time": exec_time,
                             "post": compute_multimodal_hf_edit_results(edited_model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device),
+                                                                request, 'cpu'),
                             "pre": compute_multimodal_hf_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device)
+                                                                request, 'cpu')
                         }
                                 
                 if 'locality_output' in metrics['post'].keys():
@@ -334,9 +334,9 @@ class MultimodalEditor:
                             'case_id': i,
                             "time": exec_time,
                             "post": compute_icl_multimodal_edit_quality(self.model, self.model_name, self.hparams, self.tok, icl_examples,
-                                                                request, self.hparams.device),
+                                                                request, 'cpu'),
                             "pre": compute_icl_multimodal_edit_quality(self.model, self.model_name, self.hparams, self.tok, [''],
-                                                                request, self.hparams.device, pre_edit=True)
+                                                                request, 'cpu', pre_edit=True)
                         }
                     else:
                         from copy import deepcopy
@@ -350,9 +350,9 @@ class MultimodalEditor:
                             'case_nums': i,
                             "time": exec_time,
                             "post": compute_multimodal_hf_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                prompt_new_request, self.hparams.device),
+                                                                prompt_new_request, 'cpu'),
                             "pre": compute_multimodal_hf_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device)
+                                                                request, 'cpu')
                 
                         }
                 else:
@@ -361,9 +361,9 @@ class MultimodalEditor:
                             'case_id': i,
                             "time": exec_time,
                             "post": compute_multimodal_edit_results(edited_model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device),
+                                                                request, 'cpu'),
                             "pre": compute_multimodal_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device)
+                                                                request, 'cpu')
                         }
                     elif self.model_name in ['llava-onevision', 'qwen2-vl']:
                         metrics = {
@@ -371,9 +371,9 @@ class MultimodalEditor:
                             # "requested_rewrite": request,
                             "time": exec_time,
                             "post": compute_multimodal_hf_edit_results(edited_model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device),
+                                                                request, 'cpu'),
                             "pre": compute_multimodal_hf_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                                request, self.hparams.device),
+                                                                request, 'cpu'),
                         }   
                      
                     
@@ -461,9 +461,9 @@ class MultimodalEditor:
                     # "requested_rewrite": request,
                     "time": exec_time,
                     "post": compute_icl_multimodal_edit_quality(self.model, self.model_name, self.hparams, self.tok, icl_examples,
-                                                        request, self.hparams.device),
+                                                        request, 'cpu'),
                     "pre": compute_icl_multimodal_edit_quality(self.model, self.model_name, self.hparams, self.tok, [''],
-                                                        request, self.hparams.device, pre_edit=True)
+                                                        request, 'cpu', pre_edit=True)
                 }
             else:
                 metrics = {
@@ -471,9 +471,9 @@ class MultimodalEditor:
                     # "requested_rewrite": request,
                     "time": exec_time,
                     "post": compute_multimodal_edit_results(edited_model, self.model_name, self.hparams, self.tok,
-                                                        request, self.hparams.device),
+                                                        request, 'cpu'),
                     "pre": compute_multimodal_edit_results(self.model, self.model_name, self.hparams, self.tok,
-                                                        request, self.hparams.device)
+                                                        request, 'cpu')
                 }
             if 'locality_output' in metrics['post'].keys():
                 assert len(metrics['post']['locality_output']) == \

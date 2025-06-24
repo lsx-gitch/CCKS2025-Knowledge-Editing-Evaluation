@@ -21,7 +21,6 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
                     level = logging.INFO)
 
 LOG = logging.getLogger(__name__)
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 def make_logs():
 
@@ -81,7 +80,7 @@ class ConceptEditor:
         LOG.info("Instantiating model")
 
         if type(self.model_name) is str:
-            device_map = 'auto' if hparams.model_parallel else None
+            device_map = None
             torch_dtype = torch.float16 if hasattr(hparams, 'fp16') and hparams.fp16 else torch.float32
             # if 't5' in self.model_name.lower():
             #     self.model = T5ForConditionalGeneration.from_pretrained(self.model_name, torch_dtype=torch_dtype, device_map=device_map)
@@ -129,9 +128,9 @@ class ConceptEditor:
             self.model, self.tok = self.model_name
 
         if hparams.model_parallel:
-            hparams.device = str(self.model.device).split(":")[1]
+            hparams.device = 'cpu'
         if not hparams.model_parallel and hasattr(hparams, 'device'):
-            self.model.to(f'cuda:{hparams.device}')
+            self.model.to('cpu')
 
         self.hparams = hparams
 
@@ -224,7 +223,7 @@ class ConceptEditor:
                 })
                 with torch.no_grad():
                     for k, v in weights_copy.items():
-                        nethook.get_parameter(self.model, k)[...] = v.to(f"cuda:{self.hparams.device}")
+                        nethook.get_parameter(self.model, k)[...] = v.to('cpu')
             if 'locality' in all_metrics[i]['post'].keys():
                 for locality_key in request['locality'].keys():
                     assert len(all_metrics[i]['post']['locality'][f'{locality_key}_output']) == \

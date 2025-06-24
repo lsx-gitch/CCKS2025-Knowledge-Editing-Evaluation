@@ -40,16 +40,23 @@ def summary_metrics(all_metrics):
         mean_metrics[eval] = dict()
         for key in ["rewrite_acc", "rephrase_acc", 'rewrite_ppl', 'ood_acc']:
             if key in all_metrics[0][eval].keys():
-                mean_metrics[eval][key] = np.mean([metric[eval][key] for metric in all_metrics])
+                valid_metrics = [metric[eval][key] for metric in all_metrics if metric[eval][key] is not None]
+                if valid_metrics:
+                    mean_metrics[eval][key] = np.mean(valid_metrics)
         for key in ["locality", "portability"]:
             if key in all_metrics[0][eval].keys() and all_metrics[0][eval][key] != {}:
                 mean_metrics[eval][key] = dict()
                 for lkey in get_all_acc_keys(all_metrics):
-                    metrics = [np.mean(metric[eval][key][lkey]) for metric in all_metrics if lkey in metric[eval][key].keys()]
-                    if len(metrics) > 0:
-                        mean_metrics[eval][key][lkey] = np.mean(metrics)
-                    # mean_metrics[eval][key][lkey] = np.mean(
-                    #     [metric[eval][key][lkey] for metric in all_metrics])
+                    valid_metrics = []
+                    for metric in all_metrics:
+                        if lkey in metric[eval][key].keys() and metric[eval][key][lkey] is not None:
+                            if isinstance(metric[eval][key][lkey], (list, tuple)):
+                                if len(metric[eval][key][lkey]) > 0 and metric[eval][key][lkey][0] is not None:
+                                    valid_metrics.append(np.mean(metric[eval][key][lkey][0]))
+                            else:
+                                valid_metrics.append(np.mean(metric[eval][key][lkey]))
+                    if len(valid_metrics) > 0:
+                        mean_metrics[eval][key][lkey] = np.mean(valid_metrics)
     # mean_metrics["time"] = np.mean([metric["time"] for metric in all_metrics])
 
     print("Metrics Summary: ", mean_metrics)

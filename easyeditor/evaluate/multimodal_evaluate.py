@@ -55,17 +55,17 @@ def compute_icl_multimodal_edit_quality(
     # First, unpack rewrite evaluation record.
     target = record["target"]
     prompt = record["prompt"]
-    image = record["image"] if record["image"].is_cuda else record["image"].to(hparams.device)
+    image = record["image"] if record["image"].is_cuda else record["image"].to('cpu')
     rephrase = record["rephrase_prompt"] if 'rephrase_prompt' in record.keys() else None
     rephrase_image = record["image_rephrase"] if 'image_rephrase' in record.keys() else None
     if rephrase_image is not None:
-        rephrase_image = rephrase_image if rephrase_image.is_cuda else rephrase_image.to(hparams.device)
+        rephrase_image = rephrase_image if rephrase_image.is_cuda else rephrase_image.to('cpu')
 
     if "locality_prompt" in record.keys():
         loc_q = record["locality_prompt"]
         loc_a = record["locality_ground_truth"]
     if "multimodal_locality_image" in record.keys():
-        m_loc_image = record["multimodal_locality_image"] if record["multimodal_locality_image"].is_cuda else record["multimodal_locality_image"].to(hparams.device)
+        m_loc_image = record["multimodal_locality_image"] if record["multimodal_locality_image"].is_cuda else record["multimodal_locality_image"].to('cpu')
         m_loc_q = record["multimodal_locality_prompt"]
         m_loc_a = record["multimodal_locality_ground_truth"]
 
@@ -121,7 +121,7 @@ def icl_multimodal_lm_eval(
         image,
         is_loc=False,
         neighborhood=False )-> typing.Dict:
-    device = torch.device(f'cuda:{hparams.device}')
+    device = torch.device('cpu')
 
     samples = prepare_multimodal_edit(hparams, tokenizer, target, [''.join(icl_examples) + f'{x}'], image)
 
@@ -360,7 +360,7 @@ def compute_multimodal_edit_results(
 
     target = record["target"]
     rewrite_prompts = record["prompt"]
-    image = record["image"] if record["image"].is_cuda else record["image"].to(hparams.device)
+    image = record["image"] if record["image"].is_cuda else record["image"].to('cpu')
 
     edit_inner = prepare_multimodal_edit(hparams, tok, target, rewrite_prompts, image)
     ret['rewrite_acc'], _ = compute_multimodal_edit_quality(model, edit_inner)
@@ -372,7 +372,7 @@ def compute_multimodal_edit_results(
 
     if "image_rephrase" in record.keys():
         rephrase_image = record["image_rephrase"]
-        rephrase_image = rephrase_image if rephrase_image.is_cuda else rephrase_image.to(hparams.device)
+        rephrase_image = rephrase_image if rephrase_image.is_cuda else rephrase_image.to('cpu')
         edit_image_outer = prepare_multimodal_edit(hparams, tok, target, rewrite_prompts, rephrase_image)
         ret['image_rephrase_acc'], _ = compute_multimodal_edit_quality(model, edit_image_outer)
 
@@ -386,7 +386,7 @@ def compute_multimodal_edit_results(
         m_loc_prompt = record["multimodal_locality_prompt"]
         m_loc_ground_truth = record["multimodal_locality_ground_truth"]
         m_loc_image = record["multimodal_locality_image"]
-        m_loc_image = m_loc_image if m_loc_image.is_cuda else m_loc_image.to(hparams.device)
+        m_loc_image = m_loc_image if m_loc_image.is_cuda else m_loc_image.to('cpu')
         m_locality = prepare_multimodal_edit(hparams, tok, m_loc_ground_truth, m_loc_prompt, m_loc_image)
         _, _, ret['multimodal_locality_output'] = compute_multimodal_edit_quality_demo(model, m_locality)
     # Form a list of lists of prefixes to test.
@@ -474,7 +474,7 @@ def compute_multimodal_edit_results_demo(
 
     target = record["target"]
     rewrite_prompts = record["prompt"]
-    image = record["image"] if record["image"].is_cuda else record["image"].to(hparams.device)
+    image = record["image"] if record["image"].is_cuda else record["image"].to('cpu')
 
     edit_inner = prepare_multimodal_edit(hparams, tok, target, rewrite_prompts, image)
     ret['rewrite_acc'], _, logits = compute_multimodal_edit_quality_demo(model, edit_inner)
@@ -486,7 +486,7 @@ def compute_multimodal_edit_results_demo(
 
     if "image_rephrase" in record.keys():
         rephrase_image = record["image_rephrase"]
-        rephrase_image = rephrase_image if rephrase_image.is_cuda else rephrase_image.to(hparams.device)
+        rephrase_image = rephrase_image if rephrase_image.is_cuda else rephrase_image.to('cpu')
         edit_image_outer = prepare_multimodal_edit(hparams, tok, target, rewrite_prompts, rephrase_image)
         ret['image_rephrase_acc'], _ = compute_multimodal_edit_quality(model, edit_image_outer)
 
@@ -500,7 +500,7 @@ def compute_multimodal_edit_results_demo(
         m_loc_prompt = record["multimodal_locality_prompt"]
         m_loc_ground_truth = record["multimodal_locality_ground_truth"]
         m_loc_image = record["multimodal_locality_image"]
-        m_loc_image = m_loc_image if m_loc_image.is_cuda else m_loc_image.to(hparams.device)
+        m_loc_image = m_loc_image if m_loc_image.is_cuda else m_loc_image.to('cpu')
         m_locality = prepare_multimodal_edit(hparams, tok, m_loc_ground_truth, m_loc_prompt, m_loc_image)
         _, _, ret['multimodal_locality_output'] = compute_multimodal_edit_quality_demo(model, m_locality)
     # Form a list of lists of prefixes to test.

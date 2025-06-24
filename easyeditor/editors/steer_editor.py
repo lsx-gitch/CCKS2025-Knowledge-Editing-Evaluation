@@ -106,10 +106,10 @@ class SteerEditor:
         if hparams.model_parallel:
             hparams.device = str(self.model.device).split(":")[1]
         if not hparams.model_parallel and hasattr(hparams, 'device'):
-            self.model.to(f'cuda:{hparams.device}')
+            self.model.to('cpu')
 
         self.hparams = hparams
-        self.device = torch.device(f'cuda:{hparams.device}')
+        self.device = torch.device('cpu')
         
         if self.modal_type == 'llm':
             self.lm_head = self.model.get_output_embeddings()
@@ -128,10 +128,10 @@ class SteerEditor:
         assert (input_image is not None and self.modal_type == 'mllm') or (input_image is None and self.modal_type == 'llm'), print('Error: llm cannot process image input or input_image is None.')
         
         if self.modal_type == 'llm':
-            inputs = self.tok(input_text, return_tensors="pt").to(self.device)
+            inputs = self.tok(input_text, return_tensors="pt").to('cpu')
         else:
             input_image = Image.open(input_image).convert("RGB")
-            inputs = self.tok(images=input_image, text=input_text, return_tensors="pt").to(self.device)
+            inputs = self.tok(images=input_image, text=input_text, return_tensors="pt").to('cpu')
             
         # constrained decoding methods: dola, deco, opera, vcd
         if self.alg_name == 'dola':

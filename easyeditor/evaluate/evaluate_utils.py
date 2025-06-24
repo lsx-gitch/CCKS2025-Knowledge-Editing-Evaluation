@@ -16,23 +16,31 @@ import string
 
 
 def normalize_answer(s):
+    if isinstance(s, list):
+        # 递归处理每个元素，并拼接成一个字符串
+        s = ' '.join([normalize_answer(x) for x in s])
     def remove_articles(text):
         return regex.sub(r'\b(a|an|the)\b', ' ', text)
-
     def white_space_fix(text):
         return ' '.join(text.split())
-
     def remove_punc(text):
         exclude = set(string.punctuation)
         return ''.join(ch for ch in text if ch not in exclude)
-
     def lower(text):
         return text.lower()
-
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 def exact_match_score(prediction, ground_truth):
-    return normalize_answer(prediction) == normalize_answer(ground_truth)
+    # 支持list和str的比较
+    if isinstance(prediction, list) and isinstance(ground_truth, list):
+        # 两个list，全部元素都要匹配
+        return all(normalize_answer(p) == normalize_answer(g) for p, g in zip(prediction, ground_truth))
+    elif isinstance(prediction, list):
+        return any(normalize_answer(p) == normalize_answer(ground_truth) for p in prediction)
+    elif isinstance(ground_truth, list):
+        return any(normalize_answer(prediction) == normalize_answer(g) for g in ground_truth)
+    else:
+        return normalize_answer(prediction) == normalize_answer(ground_truth)
 
 def llm_judge(question, ground_truth, prediction, api_key):
     content_template = """
@@ -121,7 +129,7 @@ def test_prediction_acc_LLM_judge(model, tok, hparams, prompts, targets, device,
             padding = True,
             truncation = True,
             return_tensors="pt",
-        ).to(f"cuda:{device}")
+        ).to('cpu')
         # add a template
         gen_tokens = model.generate(
             input_ids=prompt_tok['input_ids'],
@@ -172,7 +180,7 @@ def test_batch_prediction_acc(model, tok, hparams, prompts, target, device, loca
         truncation=True,
         max_length=hparams.max_length,
         return_tensors="pt",
-    ).to(f"cuda:{device}")
+    ).to('cpu')
 
     with torch.no_grad():
         outputs = model(**prompt_tok)
@@ -205,7 +213,7 @@ def test_seq2seq_batch_prediction_acc(model, tok, hparams, prompts, targets, dev
         truncation=True,
         max_length=hparams.max_length,
         return_tensors="pt",
-    ).to(f"cuda:{device}")
+    ).to('cpu')
 
     trg_tok = tok(
         targets,
@@ -213,7 +221,7 @@ def test_seq2seq_batch_prediction_acc(model, tok, hparams, prompts, targets, dev
         truncation=True,
         max_length=hparams.max_length,
         return_tensors="pt",
-    ).to(f"cuda:{device}")
+    ).to('cpu')
 
     prompt_tok['decoder_input_ids'] = trg_tok['input_ids']
     prompt_tok['decoder_attention_mask'] = trg_tok['attention_mask']
@@ -237,12 +245,13 @@ def test_prediction_acc(model, tok, hparams, prompts, targets, device, locality=
         if isinstance(prompts, str):
             prompts, targets = [prompts, ], [targets, ]
         results = []
+        gen_contents = []
         for prompt, target_new in zip(prompts, targets):
             target_new_tokens = tok.encode(target_new, add_special_tokens=False)
             prompt_tok = tok(
                 prompt,
                 return_tensors="pt",
-            ).to(f"cuda:{device}")
+            ).to('cpu')
             gen_token = model.generate(
                 input_ids=prompt_tok['input_ids'],
                 attention_mask=prompt_tok['attention_mask'],
@@ -253,9 +262,13 @@ def test_prediction_acc(model, tok, hparams, prompts, targets, device, locality=
             )
             if locality:
                 results.append(gen_token.detach().cpu().numpy().tolist()[0][-len(target_new_tokens):])
+                gen_contents.append(None)
             else:
-                results.append(np.mean(np.equal(target_new_tokens, gen_token.detach().cpu().numpy().tolist()[0][-len(target_new_tokens):])))
-        return results
+                acc = np.mean(np.equal(target_new_tokens, gen_token.detach().cpu().numpy().tolist()[0][-len(target_new_tokens):]))
+                results.append(acc)
+                # 生成内容为解码后的文本
+                gen_contents.append(tok.decode(gen_token[0], skip_special_tokens=True))
+        return results, gen_contents
 
     if isinstance(prompts, str):
         prompts,targets = [prompts,], [targets,]
@@ -264,6 +277,25 @@ def test_prediction_acc(model, tok, hparams, prompts, targets, device, locality=
         prompts=tok.apply_chat_template(prompts,
                                         add_generation_prompt=True,
                                         tokenize=False)
+    
+    # 生成实际文本内容用于返回
+    gen_contents = []
+    for prompt in prompts:
+        prompt_tok = tok(
+            prompt,
+            return_tensors="pt",
+        ).to('cpu')
+        gen_token = model.generate(
+            input_ids=prompt_tok['input_ids'],
+            attention_mask=prompt_tok['attention_mask'],
+            max_new_tokens=512,
+            pad_token_id=tok.eos_token_id,
+            do_sample=False,
+            use_cache=False,
+        )
+        gen_content = tok.decode(gen_token[0], skip_special_tokens=True)
+        gen_contents.append(gen_content)
+    
     prompt_target = [prompt + ' ' + target for prompt, target in zip(prompts,targets)]
     max_prompt_len = max([len(tok.encode(_)) for _ in prompt_target]) + 1
     before_padding_side = tok.padding_side
@@ -274,14 +306,14 @@ def test_prediction_acc(model, tok, hparams, prompts, targets, device, locality=
         truncation=True,
         max_length=max(hparams.max_length, max_prompt_len),
         return_tensors="pt",
-    ).to(f"cuda:{device}")
+    ).to('cpu')
     prompt_tok = tok(
         prompts,
         padding=True,
         truncation=True,
         max_length=max(hparams.max_length, max_prompt_len),
         return_tensors="pt",
-    )
+    ).to('cpu')
     tok.padding_side = before_padding_side
     num_prompt_toks = [int((i != tok.pad_token_id).sum()) for i in prompt_tok['input_ids']]
     num_pad_toks = [int((i == tok.pad_token_id).sum()) for i in prompt_target_tok['input_ids'].cpu()]
@@ -297,7 +329,7 @@ def test_prediction_acc(model, tok, hparams, prompts, targets, device, locality=
         answers = slice_list(answers,prompt_len,left=True)
         labels = slice_list(labels,prompt_len,left=False)
         if locality:
-            return answers if type(answers[0]) is list else [answers,]
+            return (answers if type(answers[0]) is list else [answers,]), None
         if isinstance(answers[0], list):
             res = []
             for ans,label in zip(answers,labels):
@@ -305,9 +337,9 @@ def test_prediction_acc(model, tok, hparams, prompts, targets, device, locality=
                 if np.isnan(temp_acc):
                     continue
                 res.append(temp_acc)
-            return res
+            return res, gen_contents
         else:
-            return [np.mean(np.equal(answers, labels))]
+            return [np.mean(np.equal(answers, labels))], gen_contents
 
 def test_generation_quality_serac(
     model,
@@ -322,9 +354,9 @@ def test_generation_quality_serac(
         truncation=True,
         max_length=512,
         return_tensors="pt",
-    )
+    ).to('cpu')
     prompt_tok_length=len(prompt_tok['input_ids'])
-    gen_texts=model.generate(**prompt_tok,max_new_tokens=256)
+    gen_texts=model.generate(**prompt_tok,max_new_tokens=256).to('cpu')
     if isinstance(model,SERAC):
         gen_texts=tok.decode(gen_texts[prompt_tok_length:])
         gen_texts=[gen_texts]
@@ -356,7 +388,6 @@ def test_generation_quality(
         max_out_len=max_out_len,
         vanilla_generation=vanilla_generation,
     )
-
     ngram_entropy = n_gram_entropy(gen_texts)
     ret = {
         "ngram_entropy": ngram_entropy,
@@ -418,7 +449,7 @@ def PPL(
     else:
         target_ids = batch["labels"][:, :1024].clone()
     with torch.no_grad():
-        outputs = model(input_ids=input_ids.to(device), labels=target_ids.to(device))
+        outputs = model(input_ids=input_ids.to('cpu'), labels=target_ids.to('cpu'))
         nll = outputs.loss
     ppl = torch.exp(nll)#.clip(0, 100)
     return ppl.cpu().numpy().tolist()
@@ -445,9 +476,9 @@ def OOD_PPL(
     target_ids = batch["labels"][:, :1024]
 
     with torch.no_grad():
-        logits = model(input_ids=input_ids.to(device), labels=target_ids.to(device)).logits
+        logits = model(input_ids=input_ids.to('cpu'), labels=target_ids.to('cpu')).logits
         shift_logits = logits[:, :-1, :].contiguous()
-        shift_labels = target_ids.to(device)[:, 1:].contiguous()
+        shift_labels = target_ids.to('cpu')[:, 1:].contiguous()
 
         log_probs = -nn.functional.log_softmax(shift_logits, dim=-1)
         if shift_labels.dim() == log_probs.dim() - 1:
@@ -481,7 +512,7 @@ def answer_match(
     target_new: str,
     device,
 ):
-    inputs = tok.encode(prompt, return_tensors='pt').to(device)
+    inputs = tok.encode(prompt, return_tensors='pt').to('cpu')
     outputs = model.generate(inputs, temperature=0, max_new_tokens=30)
     predict = tok.decode(outputs[0], skip_special_tokens=True)
 
@@ -594,7 +625,7 @@ def per_generation(
             "eos_token_id": tokenizer.eos_token_id,
         }
         src_input_ids = tokenizer(input_text).input_ids
-        input_ids = torch.tensor([src_input_ids], dtype=torch.long, device=device)
+        input_ids = torch.tensor([src_input_ids], dtype=torch.long, device='cpu')
         outputs = model.generate(input_ids, **generation_config)
         response = tokenizer.decode(outputs[0][len(src_input_ids) :], skip_special_tokens=True)
         return response
@@ -657,7 +688,7 @@ def F1(model, tok, hparams, prompts, targets, device, locality=False, vanilla_ge
         prompt_tok = tok(
             prompts,
             return_tensors="pt",
-        ).to(device)
+        ).to('cpu')
         gen_token = model.generate(
             input_ids=prompt_tok['input_ids'],
             attention_mask=prompt_tok['attention_mask'],
@@ -677,14 +708,14 @@ def F1(model, tok, hparams, prompts, targets, device, locality=False, vanilla_ge
         truncation=True,
         max_length=max(hparams.max_length, max_prompt_len),
         return_tensors="pt",
-    ).to(f"cuda:{device}")
+    ).to('cpu')
     prompt_tok = tok(
         prompts,
         padding=True,
         truncation=True,
         max_length=max(hparams.max_length, max_prompt_len),
         return_tensors="pt",
-    )
+    ).to('cpu')
     num_prompt_toks = [int((i != tok.pad_token_id).sum()) for i in prompt_tok['input_ids']]
     num_pad_toks = [int((i == tok.pad_token_id).sum()) for i in prompt_target_tok['input_ids'].cpu()]
     prompt_len = [x+y for x,y in zip(num_pad_toks,num_prompt_toks)]
@@ -718,11 +749,11 @@ def test_instance_change(model, tok, max_length, prompts, targets, device, P = N
         truncation=True,
         max_length=max(max_length, max_prompt_len),
         return_tensors="pt",
-    )
+    ).to('cpu')
     with torch.no_grad():
         pre_edit_outputs = model.generate(
-            input_ids=prompt_tok['input_ids'].to(f"cuda:{device}"),
-            attention_mask=prompt_tok['attention_mask'].to(f"cuda:{device}"),
+            input_ids=prompt_tok['input_ids'].to('cpu'),
+            attention_mask=prompt_tok['attention_mask'].to('cpu'),
             max_new_tokens=2,
             pad_token_id=tok.eos_token_id
         )
@@ -751,11 +782,11 @@ def test_concept_gen(model, tok, max_length, prompts, targets, device):
         truncation=True,
         max_length=max(max_length, max_prompt_len),
         return_tensors="pt",
-    )
+    ).to('cpu')
     with torch.no_grad():
         pre_edit_outputs = model.generate(
-            input_ids=prompt_tok['input_ids'].to(f"cuda:{device}"),
-            attention_mask=prompt_tok['attention_mask'].to(f"cuda:{device}"),
+            input_ids=prompt_tok['input_ids'].to('cpu'),
+            attention_mask=prompt_tok['attention_mask'].to('cpu'),
             max_new_tokens=40,
             pad_token_id=tok.eos_token_id
         )
@@ -769,7 +800,6 @@ def test_safety_gen(
         model, 
         tokenizer, 
         test_prompt, 
-        cuda,
         max_tokens = 1624, 
         max_output_tokens=600):
     tokenizer.padding_side = 'left'
@@ -777,7 +807,7 @@ def test_safety_gen(
     if max_tokens < 1624:
         only_response = []
         for item in test_prompt:
-            input = tokenizer([item,], return_tensors="pt", padding=True, truncation=True).to(f"cuda:{cuda}")
+            input = tokenizer([item,], return_tensors="pt", padding=True, truncation=True).to('cpu')
             if input["input_ids"].size(-1) > max_tokens-max_output_tokens:
                 input = {k: v[:, -(max_tokens - max_output_tokens):] for k, v in input.items()}
             with torch.no_grad():
@@ -792,7 +822,7 @@ def test_safety_gen(
             only_response.append(texts[len(overlap)+1:].lstrip())
         return only_response
     else:
-        input = tokenizer(test_prompt, return_tensors="pt", padding=True, truncation=True).to(f"cuda:{cuda}")
+        input = tokenizer(test_prompt, return_tensors="pt", padding=True, truncation=True).to('cpu')
         with torch.no_grad():
             outputs = model.generate(**input, max_new_tokens=max_output_tokens)
             texts = [tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
